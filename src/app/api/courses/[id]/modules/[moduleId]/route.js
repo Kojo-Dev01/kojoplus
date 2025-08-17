@@ -1,25 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getTokenFromCookies, verifyAccessToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
 import connectDB from '@/lib/mongodb';
 import Course from '@/models/Course';
 
 export async function DELETE(request, { params }) {
   try {
     // Verify admin authentication
-    // Verify admin authentication using cookies
-            const token = await getTokenFromCookies();
-            
-            if (!token) {
-              return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-            }
+   
+        // Verify admin token
+        const token = getTokenFromRequest(request);
         
-            const decoded = verifyAccessToken(token);
-            
-            if (!decoded || decoded.role !== 'admin') {
-              return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-            }
-
-    await connectDB();
+        if (!token) {
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+        }
+    
+        const payload = verifyToken(token);
+        
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
+    
+        await connectDB();
 
     const course = await Course.findById(params.id);
     if (!course) {
@@ -70,23 +71,21 @@ export async function PATCH(request, { params }) {
     console.log(`Course ID: ${id}, Module ID: ${moduleId}`);
     
     // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
     
-    if (!token) {
-      console.log('❌ No authentication token found');
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
+        // Verify admin token
+        const token = getTokenFromRequest(request);
+        
+        if (!token) {
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+        }
     
-    if (!decoded || decoded.role !== 'admin') {
-      console.log('❌ Invalid token or insufficient permissions');
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-    }
-
-    console.log(`✅ Admin authenticated: ${decoded.email}`);
-
-    await connectDB();
+        const payload = verifyToken(token);
+        
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
+    
+        await connectDB();
 
     const course = await Course.findById(id);
     if (!course) {

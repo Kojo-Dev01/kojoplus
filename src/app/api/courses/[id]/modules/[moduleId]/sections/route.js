@@ -1,26 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getTokenFromCookies, verifyAccessToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
 import connectDB from '@/lib/mongodb';
 import Course from '@/models/Course';
 
 export async function POST(request, { params }) {
   try {
     const { id, moduleId } = await params;
+   
+        // Verify admin token
+        const token = getTokenFromRequest(request);
+        
+        if (!token) {
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+        }
     
-    // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
+        const payload = verifyToken(token);
+        
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
     
-    if (!token) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
-    
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-    }
-
-    await connectDB();
+        await connectDB();
 
     const course = await Course.findById(id);
     if (!course) {

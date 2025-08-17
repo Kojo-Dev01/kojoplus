@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getTokenFromCookies, verifyAccessToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
 import connectDB from '@/lib/mongodb';
 import Course from '@/models/Course';
 
@@ -25,20 +25,21 @@ function sanitizeFilename(filename) {
 
 export async function POST(request, { params }) {
   try {
-    // Verify admin authentication using cookies
-        const token = await getTokenFromCookies();
+    
+        // Verify admin token
+        const token = getTokenFromRequest(request);
         
         if (!token) {
-          return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
         }
     
-        const decoded = verifyAccessToken(token);
+        const payload = verifyToken(token);
         
-        if (!decoded || decoded.role !== 'admin') {
-          return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
-
-    await connectDB();
+    
+        await connectDB();
 
     const course = await Course.findById(params.id);
     if (!course) {
@@ -94,20 +95,21 @@ export async function POST(request, { params }) {
 
 export async function GET(request, { params }) {
   try {
-    // Verify admin authentication using cookies
-        const token = await getTokenFromCookies();
+    
+        // Verify admin token
+        const token = getTokenFromRequest(request);
         
         if (!token) {
-          return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
         }
     
-        const decoded = verifyAccessToken(token);
+        const payload = verifyToken(token);
         
-        if (!decoded || decoded.role !== 'admin') {
-          return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
-
-    await connectDB();
+    
+        await connectDB();
 
     const course = await Course.findById(params.id);
     if (!course) {
