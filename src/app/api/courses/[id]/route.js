@@ -32,20 +32,19 @@ function sanitizeFilename(filename) {
 
 export async function GET(request, { params }) {
   try {
-    // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
+        const token = getTokenFromRequest(request);
+        
+        if (!token) {
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+        }
     
-    if (!token) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
+        const payload = verifyToken(token);
+        
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
     
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-    }
-
-    await connectDB();
+        await connectDB();
 
     const course = await Course.findById(params.id)
 
@@ -70,19 +69,19 @@ export async function GET(request, { params }) {
 export async function PATCH(request, { params }) {
   try {
     // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
-    
-    if (!token) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
-    
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-    }
-
-    await connectDB();
+            const token = getTokenFromRequest(request);
+            
+            if (!token) {
+              return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+            }
+        
+            const payload = verifyToken(token);
+            
+            if (!payload) {
+              return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+            }
+        
+            await connectDB();
 
     const course = await Course.findById(params.id)
 
@@ -326,19 +325,19 @@ export async function PATCH(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
+        const token = getTokenFromRequest(request);
+        
+        if (!token) {
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+        }
     
-    if (!token) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
+        const payload = verifyToken(token);
+        
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
     
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-    }
-
-    await connectDB();
+        await connectDB();
 
     const course = await Course.findByIdAndDelete(params.id);
 
