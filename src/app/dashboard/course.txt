@@ -1,0 +1,680 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, Filter, ChevronDown, Eye, Edit, Trash2, Plus, BookOpen, Users, Clock, Star, Award, Globe, Lock, DollarSign, BarChart3, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import DashboardLayout from '@/components/DashboardLayout';
+
+export default function CoursesPage() {
+  const [user, setUser] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({});
+  const [pagination, setPagination] = useState({});
+  const [filters, setFilters] = useState({
+    category: '',
+    section: '',
+    level: '',
+    courseType: '',
+    search: '',
+    status: '',
+    page: 1
+  });
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showModulesModal, setShowModulesModal] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showSectionDropdown, setShowSectionDropdown] = useState(false);
+  const [showLevelDropdown, setShowLevelDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const router = useRouter();
+
+  const CATEGORIES = [
+    { value: 'beginner', label: 'Beginner' },
+    { value: 'intermediate', label: 'Intermediate' },
+    { value: 'advanced', label: 'Advanced' },
+    { value: 'trading-basics', label: 'Trading Basics' },
+    { value: 'technical-analysis', label: 'Technical Analysis' },
+    { value: 'fundamental-analysis', label: 'Fundamental Analysis' },
+    { value: 'risk-management', label: 'Risk Management' },
+    { value: 'psychology', label: 'Psychology' },
+    { value: 'strategies', label: 'Strategies' },
+    { value: 'tools', label: 'Tools' },
+    { value: 'market-analysis', label: 'Market Analysis' },
+    { value: 'general', label: 'General' }
+  ];
+
+  const SECTIONS = [
+    { value: 'forex-fundamentals', label: 'Forex Fundamentals' },
+    { value: 'technical-analysis', label: 'Technical Analysis' },
+    { value: 'trading-strategies', label: 'Trading Strategies' },
+    { value: 'risk-management', label: 'Risk Management' },
+    { value: 'market-psychology', label: 'Market Psychology' },
+    { value: 'advanced-concepts', label: 'Advanced Concepts' },
+    { value: 'tools-and-platforms', label: 'Tools & Platforms' },
+    { value: 'live-trading', label: 'Live Trading' },
+    { value: 'general', label: 'General' }
+  ];
+
+  const LEVELS = [
+    { value: 'beginner', label: 'Beginner' },
+    { value: 'intermediate', label: 'Intermediate' },
+    { value: 'advanced', label: 'Advanced' },
+    { value: 'expert', label: 'Expert' }
+  ];
+
+  const secureApiCall = async (url, options = {}) => {
+    const token = localStorage.getItem('authToken');
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+    
+    if (response.status === 401) {
+      localStorage.removeItem('authToken');
+      router.replace('/auth/plus-code');
+      throw new Error('Authentication expired');
+    }
+    
+    return response;
+  };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          router.replace('/auth/plus-code');
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        router.replace('/auth/plus-code');
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+
+      const response = await secureApiCall(`/api/courses?${params}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setCourses(data.courses || []);
+        setStats(data.stats || {});
+        setPagination(data.pagination || {});
+      } else {
+        const errorData = await response.json();
+        setError(errorData.message || 'Failed to fetch courses');
+      }
+    } catch (error) {
+      if (error.message !== 'Authentication expired') {
+        setError('Failed to fetch courses');
+        console.error('Error fetching courses:', error);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteCourse = async (course) => {
+    try {
+      const response = await secureApiCall(`/api/courses/${course._id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setCourses(prev => prev.filter(c => c._id !== course._id));
+        fetchCourses(); // Refresh stats
+        return { success: true };
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to delete course');
+        return { success: false };
+      }
+    } catch (err) {
+      setError('Failed to delete course');
+      console.error('Error deleting course:', err);
+      return { success: false };
+    }
+  };
+
+  const updateCourseStatus = async (courseId, isPublished) => {
+    try {
+      const response = await secureApiCall(`/api/courses/${courseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isPublished })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCourses(prev => 
+          prev.map(course => 
+            course._id === courseId ? data.course : course
+          )
+        );
+        fetchCourses(); // Refresh to update stats
+        return { success: true };
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to update course status');
+        return { success: false };
+      }
+    } catch (err) {
+      setError('Failed to update course status');
+      console.error('Error updating course status:', err);
+      return { success: false };
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchCourses();
+    }
+  }, [filters, user]);
+
+  const handleViewCourse = (course) => {
+    setSelectedCourse(course);
+    setShowDetailsModal(true);
+  };
+
+  const handleEditCourse = (course) => {
+    setSelectedCourse(course);
+    setShowEditModal(true);
+  };
+
+  const handleManageModules = (course) => {
+    setSelectedCourse(course);
+    setShowModulesModal(true);
+  };
+
+  const handleCreateSuccess = () => {
+    fetchCourses();
+    setShowCreateModal(false);
+  };
+
+  const handleEditSuccess = () => {
+    fetchCourses();
+    setShowEditModal(false);
+  };
+
+  const handleModulesSuccess = () => {
+    fetchCourses();
+    setShowModulesModal(false);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getLevelColor = (level) => {
+    const colors = {
+      beginner: 'bg-green-100 text-green-800',
+      intermediate: 'bg-yellow-100 text-yellow-800',
+      advanced: 'bg-orange-100 text-orange-800',
+      expert: 'bg-red-100 text-red-800'
+    };
+    return colors[level] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getCourseTypeIcon = (courseType) => {
+    return courseType === 'free' ? Globe : Lock;
+  };
+
+  const getCourseTypeColor = (courseType) => {
+    return courseType === 'free' ? 'text-green-600' : 'text-purple-600';
+  };
+
+  if (loading && !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-800">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-2 text-gray-300">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <DashboardLayout user={user}>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Courses Management</h1>
+            <p className="mt-1 text-gray-300">Create and manage educational courses</p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center space-x-2 px-4 py-2 border border-gray-600 text-gray-300 rounded-xl hover:bg-gray-700 transition-colors"
+            >
+              <Filter className="w-4 h-4" />
+              <span>Filters</span>
+              <ChevronDown className={`w-4 h-4 transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              onClick={fetchCourses}
+              className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Course</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-900/20 border border-red-800 rounded-xl p-4">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2 text-red-400" />
+              <p className="text-red-300">{error}</p>
+              <button 
+                onClick={() => setError(null)}
+                className="ml-auto text-red-400 hover:text-red-300"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="w-12 h-12 rounded-xl bg-blue-900/30 border border-blue-700/50 flex items-center justify-center">
+                <BookOpen className="w-6 h-6 text-blue-300" />
+              </div>
+              <div className="ml-4">
+                <div className="text-sm font-medium text-gray-400">Total Courses</div>
+                <div className="text-2xl font-bold text-white">{loading ? '...' : stats.total || 0}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="w-12 h-12 rounded-xl bg-green-900/30 border border-green-700/50 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-300" />
+              </div>
+              <div className="ml-4">
+                <div className="text-sm font-medium text-gray-400">Published</div>
+                <div className="text-2xl font-bold text-green-300">{loading ? '...' : stats.published || 0}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="w-12 h-12 rounded-xl bg-purple-900/30 border border-purple-700/50 flex items-center justify-center">
+                <Award className="w-6 h-6 text-purple-300" />
+              </div>
+              <div className="ml-4">
+                <div className="text-sm font-medium text-gray-400">Premium</div>
+                <div className="text-2xl font-bold text-purple-300">{loading ? '...' : stats.premium || 0}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="w-12 h-12 rounded-xl bg-green-900/30 border border-green-700/50 flex items-center justify-center">
+                <Globe className="w-6 h-6 text-green-300" />
+              </div>
+              <div className="ml-4">
+                <div className="text-sm font-medium text-gray-400">Free Courses</div>
+                <div className="text-2xl font-bold text-green-300">{loading ? '...' : stats.free || 0}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="w-12 h-12 rounded-xl bg-yellow-900/30 border border-yellow-700/50 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-yellow-300" />
+              </div>
+              <div className="ml-4">
+                <div className="text-sm font-medium text-gray-400">Paid Courses</div>
+                <div className="text-2xl font-bold text-yellow-300">{loading ? '...' : stats.paid || 0}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        {showFilters && (
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm p-6">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
+              {/* Search Input */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search courses..."
+                    value={filters.search}
+                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value, page: 1 }))}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-600 bg-gray-700 text-white placeholder-gray-400 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                  />
+                </div>
+              </div>
+              
+              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Status</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="relative w-full border border-gray-600 bg-gray-700 text-white rounded-xl shadow-sm pl-3 pr-10 py-3 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  >
+                    <span className="block truncate font-medium text-white">
+                      {filters.status === 'published' ? 'Published' : 
+                       filters.status === 'draft' ? 'Draft' : 'All Status'}
+                    </span>
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                      <ChevronDown className={`h-5 w-5 transition-transform duration-200 ${
+                        showStatusDropdown ? 'rotate-180' : ''
+                      } text-gray-400`} />
+                    </span>
+                  </button>
+
+                  {showStatusDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowStatusDropdown(false)} />
+                      <div className="absolute z-20 mt-1 w-full bg-gray-800 ring-gray-600 shadow-lg max-h-60 rounded-xl py-1 ring-1 ring-opacity-5 overflow-auto focus:outline-none">
+                        {[
+                          { value: '', label: 'All Status' },
+                          { value: 'published', label: 'Published' },
+                          { value: 'draft', label: 'Draft' }
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`w-full text-left relative cursor-pointer select-none py-2 pl-3 pr-9 transition-colors ${
+                              filters.status === option.value 
+                                ? 'bg-blue-900/50 text-blue-300 font-semibold'
+                                : 'text-gray-300 font-medium hover:bg-gray-700 hover:text-white'
+                            }`}
+                            onClick={() => {
+                              setFilters(prev => ({ ...prev, status: option.value, page: 1 }));
+                              setShowStatusDropdown(false);
+                            }}
+                          >
+                            <span className="block truncate">{option.label}</span>
+                            {filters.status === option.value && (
+                              <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-blue-400">
+                                <CheckCircle className="h-4 w-4" />
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Additional filter dropdowns follow similar pattern... */}
+              {/* Category, Section, Level, Course Type filters would be implemented similarly */}
+            </div>
+          </div>
+        )}
+
+        {/* Courses Table */}
+        <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-700">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Course</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Details</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stats</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-gray-800 divide-y divide-gray-700">
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-8 text-center">
+                      <div className="flex justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : courses.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-500" />
+                      <p className="text-lg font-medium">No courses found</p>
+                      <p className="text-sm">Create your first course or adjust your filters.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  courses.map((course) => {
+                    const CourseTypeIcon = getCourseTypeIcon(course.courseType);
+                    return (
+                      <tr key={course._id} className="hover:bg-gray-700 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="w-12 h-12 rounded-xl bg-gray-600 flex items-center justify-center overflow-hidden">
+                              {course.thumbnailUrl ? (
+                                <img 
+                                  src={course.thumbnailUrl} 
+                                  alt={course.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <BookOpen className="w-6 h-6 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium max-w-xs truncate text-white">
+                                {course.title}
+                              </div>
+                              <div className="text-sm max-w-xs truncate text-gray-400">
+                                {course.instructor}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-white">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(course.level)}`}>
+                                {course.level}
+                              </span>
+                              <span className="text-gray-400">•</span>
+                              <span className="capitalize text-gray-300">{course.category?.replace('-', ' ')}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <CourseTypeIcon className={`w-4 h-4 ${getCourseTypeColor(course.courseType)}`} />
+                              <span className={`text-sm font-medium ${getCourseTypeColor(course.courseType)}`}>
+                                {course.courseType === 'free' ? 'Free' : `$${course.price}`}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-white">
+                            <div className="flex items-center space-x-4">
+                              <div className="flex items-center space-x-1">
+                                <Users className="w-4 h-4 text-gray-400" />
+                                <span>{course.enrollments || 0}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <BookOpen className="w-4 h-4 text-gray-400" />
+                                <span>{course.totalModules || 0}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <Star className="w-4 h-4 text-gray-400" />
+                                <span>{course.rating || 0}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col space-y-1">
+                            <button
+                              onClick={() => updateCourseStatus(course._id, !course.isPublished)}
+                              className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border transition-colors ${
+                                course.isPublished 
+                                  ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
+                                  : 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100'
+                              }`}
+                            >
+                              {course.isPublished ? 'Published' : 'Draft'}
+                            </button>
+                            {course.isFeatured && (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                                Featured
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-400">
+                          {formatDate(course.createdAt)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleViewCourse(course)}
+                              className="flex items-center px-2 py-1 rounded-lg bg-blue-900/50 text-blue-300 hover:bg-blue-900/70 transition-colors text-xs"
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleEditCourse(course)}
+                              className="flex items-center px-2 py-1 rounded-lg bg-green-900/50 text-green-300 hover:bg-green-900/70 transition-colors text-xs"
+                            >
+                              <Edit className="w-3 h-3 mr-1" />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleManageModules(course)}
+                              className="flex items-center px-2 py-1 rounded-lg bg-purple-900/50 text-purple-300 hover:bg-purple-900/70 transition-colors text-xs"
+                            >
+                              <BookOpen className="w-3 h-3 mr-1" />
+                              Modules
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="bg-gray-800 border-t border-gray-700 p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-300">
+                  Showing page {pagination.currentPage} of {pagination.totalPages}
+                  ({pagination.totalCount} courses)
+                </div>
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, page: prev.page - 1 }))}
+                    disabled={!pagination.hasPrev}
+                    className="px-3 py-1 bg-black text-white border border-black rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-800 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  
+                  <div className="flex items-center space-x-1">
+                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                      const pageNum = i + 1;
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setFilters(prev => ({ ...prev, page: pageNum }))}
+                          className={`px-3 py-1 text-sm border rounded transition-colors ${
+                            pageNum === pagination.currentPage
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, page: prev.page + 1 }))}
+                    disabled={!pagination.hasNext}
+                    className="px-3 py-1 bg-black text-white border border-black rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-800 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal placeholders - these would need actual modal components */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 p-6 rounded-xl">
+              <h3 className="text-white text-lg font-bold mb-4">Create Course Modal</h3>
+              <p className="text-gray-300 mb-4">Course creation form would go here</p>
+              <button 
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Similar modal placeholders for edit, details, and modules */}
+      </div>
+    </DashboardLayout>
+  );
+}
