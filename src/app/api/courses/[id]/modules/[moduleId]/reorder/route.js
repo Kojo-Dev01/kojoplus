@@ -12,23 +12,20 @@ export async function PATCH(request, { params }) {
     console.log(`Course ID: ${id}, Module ID: ${moduleId}`);
     
     // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
+        // Verify admin token
+        const token = getTokenFromRequest(request);
+        
+        if (!token) {
+          return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+        }
     
-    if (!token) {
-      console.log('❌ No authentication token found');
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
+        const payload = verifyToken(token);
+        
+        if (!payload) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
     
-    if (!decoded || decoded.role !== 'admin') {
-      console.log('❌ Invalid token or insufficient permissions');
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-    }
-
-    console.log(`✅ Admin authenticated: ${decoded.email}`);
-
-    await connectDB();
+        await connectDB();
 
     const course = await Course.findById(id);
     if (!course) {

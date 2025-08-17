@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTokenFromCookies, verifyAccessToken } from "@/lib/auth";
+import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
 import connectDB from "@/lib/mongodb";
 import Course from "@/models/Course";
 import { uploadToWasabi } from "@/lib/s3Upload";
@@ -11,22 +11,18 @@ export async function POST(request, { params }) {
     const { id, moduleId } = await params;
     console.log(`Course ID: ${id}, Module ID: ${moduleId}`);
 
-    // Verify admin authentication using cookies
-    const token = await getTokenFromCookies();
-
+    // Verify admin token
+    const token = getTokenFromRequest(request);
+    
     if (!token) {
-      console.log("❌ No authentication token found");
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: 'No token provided' }, { status: 401 });
     }
 
-    const decoded = verifyAccessToken(token);
-
-    if (!decoded || decoded.role !== "admin") {
-      console.log("❌ Invalid token or insufficient permissions");
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    const payload = verifyToken(token);
+    
+    if (!payload) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
-
-    console.log(`✅ Admin authenticated: ${decoded.email}`);
 
     await connectDB();
 

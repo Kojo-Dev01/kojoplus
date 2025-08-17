@@ -1,17 +1,24 @@
 import { NextResponse } from "next/server";
-import { verifyAdminAuth } from '../../../../lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
+import connectDB from "@/lib/mongodb";
 
 export async function POST(request) {
   try {
-    // Verify admin token
-    const authResult = await verifyAdminAuth();
         
-        if (!authResult.success) {
-          console.log('❌ Academy API:', authResult.error);
-          return NextResponse.json({ message: authResult.error }, { status: 401 });
-        }
+    // Verify admin token
+    const token = getTokenFromRequest(request);
     
-        console.log('✅ Academy API: Authentication successful for admin:', authResult.user.email);
+    if (!token) {
+      return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+    }
+
+    const payload = verifyToken(token);
+    
+    if (!payload) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    await connectDB();
     
     const { emails, type, subject, message, priority } = await request.json();
 
