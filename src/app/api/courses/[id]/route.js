@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getTokenFromCookies, verifyAccessToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
 import connectDB from '@/lib/mongodb';
 import Course from '@/models/Course';
 import { uploadToWasabi, deleteFromWasabi } from '@/lib/s3Upload';
