@@ -23,4 +23,12 @@ export const ALLOWED_TAB_ACCESS = [
   'courses',
   'forecasts',
   'resources',
+  'trade',
+  'plus_users',
+  'collaborations',
+  'academy',
+  'booking_schedule',
+  'enquiries',
+  'publishers',
+  'one_on_one'
 ];

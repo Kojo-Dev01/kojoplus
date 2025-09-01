@@ -27,6 +27,61 @@ export default function DashboardSidebar({ user, sidebarOpen, setSidebarOpen }) 
       ),
       route: '/dashboard/users'
     },
+    'trade': {
+      name: 'Trade',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3v18m9-9H3" />
+        </svg>
+      ),
+      route: '/dashboard/trade'
+    },
+    'collaborations': {
+      name: 'Collaborations',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3v18m9-9H3" />
+        </svg>
+      ),
+      route: '/dashboard/collaborations'
+    },
+    'academy': {
+      name: 'Academy',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3v18m9-9H3" />
+        </svg>
+      ),
+      route: '/dashboard/academy'
+    },
+
+    'enquiries': {
+      name: 'Enquiries',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3v18m9-9H3" />
+        </svg>
+      ),
+      route: '/dashboard/enquiries'
+    },
+    'publishers': {
+      name: 'Publishers',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3v18m9-9H3" />
+        </svg>
+      ),
+      route: '/dashboard/publishers'
+    },
+    'one_on_one': {
+      name: 'One-on-One',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3v18m9-9H3" />
+        </svg>
+      ),
+      route: '/dashboard/bookings'
+    },
     'analytics': {
       name: 'Analytics',
       icon: (
@@ -108,7 +163,7 @@ export default function DashboardSidebar({ user, sidebarOpen, setSidebarOpen }) 
         </svg>
       ),
       route: '/dashboard/resources'
-    }
+    },
   };
 
   // Get available tabs for the user
