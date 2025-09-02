@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
-import Affiliate from '../../../../../models/Affiliate';
-import jwt from 'jsonwebtoken';
+import Affiliate from '@/models/Affiliate';
 
 export async function GET(request, { params }) {
   try {

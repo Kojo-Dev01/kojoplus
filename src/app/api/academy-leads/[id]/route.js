@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import connectDB from '../../../../../lib/mongodb';
-import AcademyLead from '../../../../../models/AcademyLead';
+import connectDB from '@/lib/mongodb';
+import AcademyLead from '@/models/AcademyLead';
 
 export async function PATCH(request, { params }) {
   try {
