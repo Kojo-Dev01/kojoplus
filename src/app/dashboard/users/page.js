@@ -2,56 +2,48 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Filter, ChevronDown, Eye, Send, BarChart3, CheckCircle } from 'lucide-react';
+import { Search, Filter, ChevronDown, Eye, Send, BarChart3, CheckCircle, Download } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
-// import UserDetailsPanel from '@/components/users/UserDetailsPanel';
-// import UserStatisticsPanel from '@/components/users/UserStatisticsPanel';
-// import BulkEmailModal from '@/components/common/BulkEmailModal';
-// import COUNTRY_CODES from '@/data/countryCodes.json';
-
-// Temporary placeholder country codes data
-const COUNTRY_CODES = [
-  { country: 'United States', code: '+1', flag: '🇺🇸' },
-  { country: 'United Kingdom', code: '+44', flag: '🇬🇧' },
-  { country: 'Nigeria', code: '+234', flag: '🇳🇬' },
-  { country: 'Ghana', code: '+233', flag: '🇬🇭' },
-  { country: 'South Africa', code: '+27', flag: '🇿🇦' },
-  { country: 'Kenya', code: '+254', flag: '🇰🇪' },
-  { country: 'Germany', code: '+49', flag: '🇩🇪' },
-  { country: 'France', code: '+33', flag: '🇫🇷' },
-  { country: 'Canada', code: '+1', flag: '🇨🇦' },
-  { country: 'Australia', code: '+61', flag: '🇦🇺' }
-];
+import UserDetailsPanel from '@/components/users/UserDetailsPanel';
+import UserStatisticsPanel from '@/components/users/UserStatisticsPanel';
+import BulkEmailModal from '@/components/common/BulkEmailModal';
+import { useTheme } from '@/contexts/ThemeContext';
+import COUNTRY_CODES from '@/data/countryCodes.json';
 
 export default function UsersPage() {
-  const [user, setUser] = useState(null);
   const [users, setUsers] = useState([]);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [stats, setStats] = useState({});
   const [pagination, setPagination] = useState({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [verificationFilter, setVerificationFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showPanel, setShowPanel] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showVerificationDropdown, setShowVerificationDropdown] = useState(false);
-  const [verificationFilter, setVerificationFilter] = useState('');
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
-  const [countryFilter, setCountryFilter] = useState('');
   const [countrySearchTerm, setCountrySearchTerm] = useState('');
   const [showBulkEmailModal, setShowBulkEmailModal] = useState(false);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [error, setError] = useState(null);
+  const [exporting, setExporting] = useState(false);
   
   // Separate state for all users (for bulk operations and statistics)
   const [allUsers, setAllUsers] = useState([]);
   const [loadingAllUsers, setLoadingAllUsers] = useState(false);
   const [allUsersLoaded, setAllUsersLoaded] = useState(false);
 
+  // Available countries in the database (populated from API response)
+  const [availableCountries, setAvailableCountries] = useState([]);
+
   const router = useRouter();
+  const { isDarkMode } = useTheme();
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -61,7 +53,7 @@ export default function UsersPage() {
           const userData = await response.json();
           setUser(userData);
           
-          // Check if user has access to users management
+          // Check if user has access to users
           if (userData?.isAdministrator && !userData.tabAccess?.includes('users')) {
             setAccessDenied(true);
           }
@@ -80,17 +72,18 @@ export default function UsersPage() {
   }, [router]);
 
   // Fetch paginated users for table display
-  const fetchUsers = async (page = 1, searchQuery = '', status = '', verification = '') => {
+  const fetchUsers = async (page = 1, searchQuery = '', status = '', verification = '', selectedCountry = '') => {
     try {
       setLoading(true);
       setError(null);
 
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '50',
+        limit: '100',
         search: searchQuery,
         ...(status && { status }),
-        ...(verification && { verification })
+        ...(verification && { verification }),
+        ...(selectedCountry && { country: selectedCountry })
       });
 
       const response = await fetch(`/api/users?${params}`, {
@@ -129,10 +122,28 @@ export default function UsersPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setAllUsers(data.users || []);
+        const allUsersData = data.users || [];
+        setAllUsers(allUsersData);
         setAllUsersLoaded(true);
-        console.log(`Loaded ${data.users?.length || 0} users for bulk operations`);
-        return data.users || [];
+        
+        // Calculate available countries from all users using backend data
+        const countryMap = new Map();
+        allUsersData.forEach(user => {
+          const userCountry = getCountryFromPhoneNumber(user.phone || user.whatsapp);
+          if (userCountry) {
+            countryMap.set(userCountry, (countryMap.get(userCountry) || 0) + 1);
+          }
+        });
+
+        // Convert to array with country data from countryCodes.json
+        const countriesWithCounts = Array.from(countryMap.entries()).map(([countryName, count]) => {
+          const countryData = COUNTRY_CODES.find(c => c.country === countryName);
+          return countryData ? { ...countryData, count } : null;
+        }).filter(Boolean);
+
+        setAvailableCountries(countriesWithCounts);
+        console.log(`Loaded ${allUsersData.length} users for bulk operations`);
+        return allUsersData;
       } else {
         console.error('Failed to fetch all users');
         return [];
@@ -145,12 +156,31 @@ export default function UsersPage() {
     }
   };
 
-  // Load paginated users on filter changes
+  // Helper function to extract country from phone number
+  const getCountryFromPhoneNumber = (phoneNumber) => {
+    if (!phoneNumber) return null;
+    
+    // Clean the number (remove spaces, dashes, etc.)
+    const cleanNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+    
+    // Sort country codes by length (longest first) to match longer codes first
+    const sortedCodes = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
+    
+    for (const countryData of sortedCodes) {
+      if (cleanNumber.startsWith(countryData.code)) {
+        return countryData.country;
+      }
+    }
+    
+    return null;
+  };
+
+  // Load paginated users on filter changes - including country filter
   useEffect(() => {
     if (user && !accessDenied) {
-      fetchUsers(currentPage, search, statusFilter, verificationFilter);
+      fetchUsers(currentPage, search, statusFilter, verificationFilter, countryFilter);
     }
-  }, [currentPage, search, statusFilter, verificationFilter, user, accessDenied]);
+  }, [currentPage, search, statusFilter, verificationFilter, countryFilter, user, accessDenied]);
 
   // Load all users in background on component mount
   useEffect(() => {
@@ -158,12 +188,6 @@ export default function UsersPage() {
       fetchAllUsers();
     }
   }, [user, accessDenied]);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setCurrentPage(1);
-    fetchUsers(1, search, statusFilter, verificationFilter);
-  };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -234,84 +258,14 @@ export default function UsersPage() {
     };
   };
 
-  // Helper function to extract country from WhatsApp number
-  const getCountryFromWhatsApp = (whatsappNumber) => {
-    if (!whatsappNumber) return null;
-    
-    // Clean the number (remove spaces, dashes, etc.)
-    const cleanNumber = whatsappNumber.replace(/[\s\-\(\)]/g, '');
-    
-    // Sort country codes by length (longest first) to match longer codes first
-    const sortedCodes = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
-    
-    for (const countryData of sortedCodes) {
-      if (cleanNumber.startsWith(countryData.code)) {
-        return countryData;
-      }
-    }
-    
-    return null;
-  };
-
-  // Filter users by country (client-side)
-  const filteredUsers = users.filter(user => {
-    if (!countryFilter) return true;
-    
-    const userCountry = getCountryFromWhatsApp(user.whatsapp || user.phone);
-    return userCountry && userCountry.country === countryFilter;
-  });
-
-  const getCountry = (whatsappNumber) => {
-    if (!whatsappNumber) return null;
-
-    // Remove any non-digit characters except +
-    const cleanNumber = whatsappNumber.replace(/[^\d+]/g, "");
-
-    // Try to match with country codes, starting with longest codes first
-    const sortedCodes = [...COUNTRY_CODES].sort(
-      (a, b) => b.code.length - a.code.length
-    );
-
-    for (const countryData of sortedCodes) {
-      if (cleanNumber.startsWith(countryData.code)) {
-        return countryData;
-      }
-    }
-
-    return null;
-  };
-
-  // Compute country counts from allUsers
-  const countryCounts = (() => {
-    const counts = {};
-    allUsers.forEach((user) => {
-      const countryData = getCountry(user.phone || user.whatsapp);
-      if (countryData) {
-        counts[countryData.country] = (counts[countryData.country] || 0) + 1;
-      }
-    });
-    return counts;
-  })();
-
   // Filter countries based on search term
-  const filteredCountries = Object.keys(countryCounts)
-    .map((countryName) => {
-      const countryData = COUNTRY_CODES.find((c) => c.country === countryName);
-      return countryData
-        ? { ...countryData, count: countryCounts[countryName] }
-        : null;
-    })
-    .filter(Boolean)
-    .filter((country) => {
-      const searchLower = countrySearchTerm.toLowerCase();
-      return (
-        country.country.toLowerCase().includes(searchLower) ||
-        country.code.toLowerCase().includes(searchLower)
-      );
-    });
-
-  // Get selected country data
-  const selectedCountryData = COUNTRY_CODES.find(c => c.country === countryFilter);
+  const filteredCountries = availableCountries.filter((country) => {
+    const searchLower = countrySearchTerm.toLowerCase();
+    return (
+      country.country.toLowerCase().includes(searchLower) ||
+      country.code.toLowerCase().includes(searchLower)
+    );
+  });
 
   // Handle opening statistics panel
   const handleOpenStatsPanel = async () => {
@@ -341,6 +295,58 @@ export default function UsersPage() {
       await fetchAllUsers();
     }
     setShowBulkEmailModal(true);
+  };
+
+  // Handle CSV export
+  const handleExportCSV = async () => {
+    try {
+      setExporting(true);
+      setError(null);
+
+      // Build the same parameters as the current view
+      const params = new URLSearchParams({
+        export: 'csv',
+        search: search,
+        ...(statusFilter && { status: statusFilter }),
+        ...(verificationFilter && { verification: verificationFilter }),
+        ...(countryFilter && { country: countryFilter })
+      });
+
+      const response = await fetch(`/api/users?${params}`, {
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        // Get the filename from the response headers
+        const contentDisposition = response.headers.get('content-disposition');
+        const filename = contentDisposition
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+
+        // Create blob and download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        // Show success message
+        console.log('Export completed successfully');
+      } else {
+        const errorData = await response.json();
+        setError(errorData.message || 'Failed to export users');
+      }
+    } catch (error) {
+      setError('Failed to export users');
+      console.error('Error exporting users:', error);
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading && !user) {
@@ -415,6 +421,23 @@ export default function UsersPage() {
           </div>
           <div className="flex space-x-3">
             <button
+              onClick={handleExportCSV}
+              disabled={exporting || loading}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Exporting...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Export CSV</span>
+                </>
+              )}
+            </button>
+            <button
               onClick={handleOpenStatsPanel}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
             >
@@ -452,7 +475,7 @@ export default function UsersPage() {
               <ChevronDown className={`w-4 h-4 transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
             </button>
             <button
-              onClick={() => fetchUsers(currentPage, search, statusFilter, verificationFilter)}
+              onClick={() => fetchUsers(currentPage, search, statusFilter, verificationFilter, countryFilter)}
               className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
             >
               Refresh
@@ -471,7 +494,7 @@ export default function UsersPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-400">Total Users</p>
-                <p className="text-2xl font-bold text-white">{stats.total || 0}</p>
+                <p className="text-2xl font-bold text-white">{stats?.total || 0}</p>
                 {loadingAllUsers && !allUsersLoaded && (
                   <p className="text-xs text-blue-600 mt-1">Loading all users...</p>
                 )}
@@ -491,7 +514,7 @@ export default function UsersPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-400">Active Users</p>
-                <p className="text-2xl font-bold text-white">{stats.active || 0}</p>
+                <p className="text-2xl font-bold text-white">{stats?.active || 0}</p>
               </div>
             </div>
           </div>
@@ -505,7 +528,7 @@ export default function UsersPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-400">Inactive Users</p>
-                <p className="text-2xl font-bold text-white">{stats.inactive || 0}</p>
+                <p className="text-2xl font-bold text-white">{stats?.inactive || 0}</p>
               </div>
             </div>
           </div>
@@ -519,7 +542,7 @@ export default function UsersPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-400">Verified</p>
-                <p className="text-2xl font-bold text-white">{stats.verified || 0}</p>
+                <p className="text-2xl font-bold text-white">{stats?.verified || 0}</p>
               </div>
             </div>
           </div>
@@ -584,6 +607,7 @@ export default function UsersPage() {
                           onClick={() => {
                             setStatusFilter(option.value);
                             setShowStatusDropdown(false);
+                            setCurrentPage(1);
                           }}
                         >
                           <span className="block truncate">{option.label}</span>
@@ -640,6 +664,7 @@ export default function UsersPage() {
                           onClick={() => {
                             setVerificationFilter(option.value);
                             setShowVerificationDropdown(false);
+                            setCurrentPage(1);
                           }}
                         >
                           <span className="block truncate">{option.label}</span>
@@ -650,6 +675,131 @@ export default function UsersPage() {
                           )}
                         </button>
                       ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Country Filter with Search - UPDATED for backend filtering */}
+              <div className="relative">
+                <button
+                  type="button"
+                  className="relative w-[300px] border border-gray-600 bg-gray-800 text-white rounded-xl shadow-sm pl-3 pr-10 py-3 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                >
+                  <span className="block truncate font-medium text-white">
+                    {countryFilter
+                      ? (() => {
+                          const selected = filteredCountries.find(
+                            (c) => c.country === countryFilter
+                          );
+                          return selected ? (
+                            <span className="flex items-center space-x-2">
+                              <span>{selected.flag}</span>
+                              <span>{selected.country}</span>
+                              <span className="text-sm text-gray-400">
+                                ({selected.code})
+                              </span>
+                              <span className="ml-2 text-xs text-green-700 font-bold">
+                                {selected.count}
+                              </span>
+                            </span>
+                          ) : (
+                            countryFilter
+                          );
+                        })()
+                      : "All Countries"}
+                  </span>
+                  <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                    <ChevronDown className={`h-5 w-5 transition-transform duration-200 ${
+                      showCountryDropdown ? "rotate-180" : ""
+                    } text-gray-400`} />
+                  </span>
+                </button>
+                
+                {showCountryDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowCountryDropdown(false)} />
+                    <div className="absolute z-20 mt-1 w-full bg-gray-800 ring-gray-600 shadow-lg max-h-80 rounded-xl py-1 ring-1 ring-opacity-5 overflow-hidden focus:outline-none">
+                      {/* Search input inside dropdown */}
+                      <div className="p-2 border-b border-gray-600">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="Search country or code..."
+                            value={countrySearchTerm}
+                            onChange={(e) => setCountrySearchTerm(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 border border-gray-600 bg-gray-700 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm text-white placeholder-gray-400"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {/* All Countries option */}
+                        <button
+                          type="button"
+                          className={`w-full text-left relative cursor-pointer select-none py-2 pl-3 pr-9 transition-colors ${
+                            !countryFilter
+                              ? 'bg-red-900/50 text-red-300 font-semibold'
+                              : 'text-gray-300 font-medium hover:bg-gray-700 hover:text-white'
+                          }`}
+                          onClick={() => {
+                            setCountryFilter('');
+                            setShowCountryDropdown(false);
+                            setCountrySearchTerm('');
+                            setCurrentPage(1); // Reset to page 1 when filter changes
+                          }}
+                        >
+                          <span className="block truncate">All Countries</span>
+                          {!countryFilter && (
+                            <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-red-400">
+                              <CheckCircle className="h-4 w-4" />
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Filtered countries from backend */}
+                        {filteredCountries.map((country) => (
+                          <button
+                            key={`${country.code}-${country.country}`}
+                            type="button"
+                            className={`w-full text-left relative cursor-pointer select-none py-2 pl-3 pr-9 transition-colors ${
+                              countryFilter === country.country
+                                ? 'bg-red-900/50 text-red-300 font-semibold'
+                                : 'text-gray-300 font-medium hover:bg-gray-700 hover:text-white'
+                            }`}
+                            onClick={() => {
+                              setCountryFilter(country.country);
+                              setShowCountryDropdown(false);
+                              setCountrySearchTerm('');
+                              setCurrentPage(1); // Reset to page 1 when filter changes
+                            }}
+                          >
+                            <div className="flex items-center space-x-2 truncate">
+                              <span>{country.flag}</span>
+                              <span className="truncate">{country.country}</span>
+                              <span className="text-sm text-gray-400">
+                                ({country.code})
+                              </span>
+                              <span className="ml-2 text-xs text-green-700 font-bold">
+                                {country.count}
+                              </span>
+                            </div>
+                            {countryFilter === country.country && (
+                              <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-red-400">
+                                <CheckCircle className="h-4 w-4" />
+                              </span>
+                            )}
+                          </button>
+                        ))}
+
+                        {filteredCountries.length === 0 && countrySearchTerm && (
+                          <div className="py-4 px-3 text-center text-sm text-gray-400">
+                            No countries found matching &quot;{countrySearchTerm}&quot;
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
@@ -680,14 +830,14 @@ export default function UsersPage() {
                       </div>
                     </td>
                   </tr>
-                ) : filteredUsers.length === 0 ? (
+                ) : users.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="px-6 py-4 text-center text-gray-400">
                       {countryFilter ? `No users found from ${countryFilter}` : 'No users found'}
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user) => (
+                  users.map((user) => (
                     <tr key={user._id} className="hover:bg-gray-700 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -707,20 +857,20 @@ export default function UsersPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-white">
                           {(() => {
-                            const whatsappCountry = getCountryFromWhatsApp(user.whatsapp || user.phone);
+                            const whatsappCountry = getCountryFromPhoneNumber(user.whatsapp);
                             return whatsappCountry ? (
                               <div className="flex items-center space-x-2">
-                                <span className="text-lg">{whatsappCountry.flag}</span>
-                                <span className="font-medium">{whatsappCountry.country}</span>
+                                <span className="text-lg">
+                                  {COUNTRY_CODES.find(c => c.country === whatsappCountry)?.flag}
+                                </span>
+                                <span className="font-medium">{whatsappCountry}</span>
                               </div>
                             ) : (
                               user.phone || 'No phone'
                             );
                           })()}
                         </div>
-                        <div className="text-sm text-gray-400">
-                          Phone: {user.whatsapp || user.phone || 'Not provided'}
-                        </div>
+                        <div className="text-sm text-gray-400">WhatsApp: {user.whatsapp || 'Not provided'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col space-y-1">
@@ -746,7 +896,7 @@ export default function UsersPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button 
                           onClick={() => handleViewUser(user)}
-                          className="flex items-center px-3 py-1 bg-blue-900/50 text-blue-300 hover:bg-blue-900/70 rounded-lg transition-colors mr-3"
+                          className="flex items-center px-3 py-1 rounded-lg transition-colors mr-3 bg-blue-900/50 text-blue-300 hover:bg-blue-900/70"
                         >
                           <Eye className="w-4 h-4 mr-1" />
                           View
@@ -764,9 +914,8 @@ export default function UsersPage() {
             <div className="bg-gray-800 border-t border-gray-700 px-4 py-3 sm:px-6">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-300">
-                  Showing {filteredUsers.length} of {users.length} users
+                  Showing {users.length} of {pagination.totalCount} users
                   {countryFilter && ` from ${countryFilter}`}
-                  {pagination.totalCount && ` (${pagination.totalCount} total in database)`}
                 </div>
                 
                 {/* Page Numbers Navigation */}
@@ -814,8 +963,8 @@ export default function UsersPage() {
           )}
         </div>
 
-        {/* Placeholder for Modals - These would be imported when components are created */}
-        {/* <UserStatisticsPanel
+        {/* User Statistics Panel */}
+        <UserStatisticsPanel
           isOpen={showStatsPanel}
           onClose={handleCloseStatsPanel}
           users={allUsers}
@@ -824,23 +973,26 @@ export default function UsersPage() {
           onRefresh={handleRefreshStats}
         />
 
+        {/* Enhanced Bulk Email Modal */}
         <BulkEmailModal
           isOpen={showBulkEmailModal}
           onClose={() => setShowBulkEmailModal(false)}
           emails={getTargetGroupEmails()}
           title="Bulk Message Users"
           subtitle={`Send messages to users (${allUsers.length} total users loaded)`}
+          // Pass additional props for target group functionality
           getEmailsByGroup={getTargetGroupEmails}
           getGroupCounts={getTargetGroupCounts}
           isDataLoaded={allUsersLoaded}
           isLoadingData={loadingAllUsers}
         />
 
+        {/* User Details Panel */}
         <UserDetailsPanel
           isOpen={showPanel}
           onClose={handleClosePanel}
           user={selectedUser}
-        /> */}
+        />
       </div>
     </DashboardLayout>
   );

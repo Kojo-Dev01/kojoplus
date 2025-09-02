@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { X, User, Mail, Phone, Calendar, MapPin, Shield, CheckCircle, XCircle, Clock, Edit, Save, Ban, Send, Bell } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const COUNTRY_CODES = [
@@ -127,7 +126,6 @@ export default function UserDetailsPanel({ isOpen, onClose, user }) {
   const [sendingContact, setSendingContact] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
 
-  const { secureApiCall } = useAuth();
   const { isDarkMode } = useTheme();
 
   if (!isOpen || !user) return null;
@@ -173,8 +171,9 @@ export default function UserDetailsPanel({ isOpen, onClose, user }) {
       // Send based on contact type
       if (contactForm.type === 'email' || contactForm.type === 'both') {
         // Send email
-        const emailResponse = await secureApiCall('/api/admin/send-email', {
+        const emailResponse = await fetch('/api/admin/send-email', {
           method: 'POST',
+          credentials: 'include',
           body: JSON.stringify({
             to: user.email,
             subject: contactForm.subject,
@@ -190,8 +189,9 @@ export default function UserDetailsPanel({ isOpen, onClose, user }) {
 
       if (contactForm.type === 'notification' || contactForm.type === 'both') {
         // Send in-app notification using the correct type
-        const notificationResponse = await secureApiCall('/api/admin/send-notification', {
+        const notificationResponse = await fetch('/api/admin/send-notification', {
           method: 'POST',
+          credentials: 'include',
           body: JSON.stringify({
             userId: user._id,
             title: contactForm.subject,

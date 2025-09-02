@@ -62,6 +62,28 @@ UserSchema.pre('save', async function(next) {
   }
 });
 
+UserSchema.virtual('countryCode').get(function () {
+  if (!this.phone) return null;
+
+  // Simple regex to capture international prefix
+  // Assumes phone numbers are in +234..., +1..., +44... format
+  const match = this.phone.match(/^\+?(\d{1,4})/);
+  return match ? `+${match[1]}` : null;
+});
+
+// Hash password before saving
+UserSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const saltRounds = 12;
+    this.password = await bcrypt.hash(this.password, saltRounds);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Instance method to verify password
 UserSchema.methods.verifyPassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
