@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
 import connectDB from '@/lib/mongodb';
-import Enquiry from '../../../../../models/Enquiry';
+import Enquiry from '@/models/Enquiry';
 
 export async function PATCH(request, { params }) {
   try {

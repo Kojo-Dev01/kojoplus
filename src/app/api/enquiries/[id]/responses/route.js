@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
-import connectDB from '../../../../../../lib/mongodb';
-import EnquiryResponse from '../../../../../../models/EnquiryResponse';
+import connectDB from '@/lib/mongodb';
+import EnquiryResponse from '@/models/EnquiryResponse';
 
 export async function GET(request, { params }) {
   try {
