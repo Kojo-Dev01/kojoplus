@@ -1,57 +1,96 @@
-import { NextResponse } from 'next/server';
-import { verifyToken, getTokenFromRequest } from '@/lib/jwt';
-import connectDB from '@/lib/mongodb';
-import Enquiry from '@/models/Enquiry';
+import { NextResponse } from "next/server";
+import { verifyToken, getTokenFromRequest } from "@/lib/jwt";
+import connectDB from "@/lib/mongodb";
+import Enquiry from "@/models/Enquiry";
+import User from "@/models/User";
+
+export async function GET(request, { params }) {
+  try {
+    // Verify admin authentication using JWT
+    const token = getTokenFromRequest(request);
+
+    if (!token) {
+      return NextResponse.json({ error: "No token provided" }, { status: 401 });
+    }
+
+    const payload = verifyToken(token);
+
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+
+    await connectDB();
+
+    const { id } = await params;
+    const enquiry = await Enquiry.findById(id).populate("submittedBy");
+
+    if (!enquiry) {
+      return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      enquiry,
+    });
+  } catch (error) {
+    console.error("Error fetching enquiry:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function PATCH(request, { params }) {
   try {
-      // Verify admin authentication using JWT
-      const token = getTokenFromRequest(request);
-      
-      if (!token) {
-        return NextResponse.json({ error: 'No token provided' }, { status: 401 });
-      }
-  
-      const payload = verifyToken(token);
-      
-      if (!payload) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-      }
-  
-      await connectDB();
+    // Verify admin authentication using JWT
+    const token = getTokenFromRequest(request);
+
+    if (!token) {
+      return NextResponse.json({ error: "No token provided" }, { status: 401 });
+    }
+
+    const payload = verifyToken(token);
+
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+
+    await connectDB();
 
     const { id } = await params;
-    const updates = await request.json();
+    const { status } = await request.json();
 
-    const enquiry = await Enquiry.findById(id);
-    
-    if (!enquiry) {
+    if (!status) {
       return NextResponse.json(
-        { message: 'Enquiry not found' },
-        { status: 404 }
+        { error: "Status is required" },
+        { status: 400 }
       );
     }
 
-    // If status is being updated, use the updateStatus method
-    if (updates.status) {
-      await enquiry.updateStatus(updates.status, decoded.username);
-    } else {
-      // For other updates
-      Object.assign(enquiry, updates);
-      await enquiry.save();
+    const updateData = { status };
+
+    if (status === "resolved" || status === "closed") {
+      updateData.resolvedAt = new Date();
+      updateData.resolvedBy = decoded.username || decoded.email;
     }
 
-    await enquiry.populate('submittedBy');
+    const enquiry = await Enquiry.findByIdAndUpdate(id, updateData, {
+      new: true,
+    }).populate("submittedBy");
+
+    if (!enquiry) {
+      return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
+    }
 
     return NextResponse.json({
-      message: 'Enquiry updated successfully',
-      enquiry
+      success: true,
+      enquiry,
     });
-
   } catch (error) {
-    console.error('Error updating enquiry:', error);
+    console.error("Error updating enquiry:", error);
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
